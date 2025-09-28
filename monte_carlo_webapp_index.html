@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculateur Monte Carlo — Combinaison de distributions</title>
+  <style>
+    :root{--bg:#0b0c10;--panel:#111317;--muted:#8e9aa5;--text:#e6edf3;--accent:#4f8cff;--ok:#2ecc71;--warn:#f1c40f;--bad:#e74c3c}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px;background:#0e1116;position:sticky;top:0;z-index:1;border-bottom:1px solid #1f232b}
+    h1{font-size:18px;margin:0}
+    main{max-width:1100px;margin:20px auto;padding:0 16px;display:grid;gap:16px}
+    .card{background:var(--panel);border:1px solid #1f232b;border-radius:14px;padding:14px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=text], input[type=number]{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2f3a;background:#0e1116;color:var(--text)}
+    .row{display:grid;gap:12px}
+    .grid-2{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(3,1fr)}.grid-4{grid-template-columns:repeat(4,1fr)}
+    .btn{appearance:none;border:1px solid #2a2f3a;background:#10141b;color:var(--text);padding:10px 12px;border-radius:10px;cursor:pointer}
+    .btn.primary{background:var(--accent);border-color:transparent;color:white}
+    .btn.ghost{background:transparent}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .vars{display:grid;gap:12px}
+    .var{border:1px dashed #2a2f3a;border-radius:12px;padding:12px}
+    .varhead{display:flex;gap:8px;align-items:center;justify-content:space-between}
+    .badge{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid #2a2f3a;color:#cdd9e5}
+    .badge.ok{border-color:#295f3b;background:#153723;color:#a0e6b3}
+    .badge.warn{border-color:#5a4c1a;background:#2a250e;color:#f7df8a}
+    .danger{color:var(--bad)}
+    .muted{color:var(--muted)}
+    .resgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .stat{padding:12px;border-radius:12px;background:#0d1016;border:1px solid #1f232b}
+    .stat .label{font-size:11px;color:var(--muted)}
+    .stat .value{font:600 20px/1.2 system-ui,-apple-system,Segoe UI,Roboto}
+    .flex{display:flex;gap:8px;align-items:center}
+    .right{margin-left:auto}
+    canvas{width:100%;height:220px;background:#0d1016;border:1px solid #1f232b;border-radius:12px}
+    .small{font-size:12px}
+    .split{display:grid;grid-template-columns:2.2fr 1fr;gap:16px}
+    @media (max-width:900px){.split{grid-template-columns:1fr}}
+  </style>
+  <script src="https://unpkg.com/mathjs@11.11.0/lib/browser/math.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Calculateur Monte Carlo — Combinaison de distributions</h1>
+    <div class="toolbar">
+      <button class="btn" id="resetBtn">Réinitialiser</button>
+      <button class="btn primary" id="runBtn">Calculer</button>
+    </div>
+  </header>
+  <main>
+    <section class="card">
+      <label>Expression</label>
+      <input id="expr" type="text" placeholder="Ex: (prix_unitaire - coût_unitaire) * volume_vente" />
+      <p class="small muted">Utilisez les noms exacts des variables ci-dessous. Les fonctions/math constants de <code>math.js</code> sont disponibles.</p>
+    </section>
+
+    <section class="split">
+      <div class="card">
+        <div class="flex">
+          <strong>Variables</strong>
+          <button class="btn right" id="addVar">+ Ajouter une variable</button>
+        </div>
+        <div id="vars" class="vars" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
+        <div class="flex" style="justify-content:space-between;align-items:center">
+          <div>
+            <label>Nombre d'échantillons</label>
+            <input id="samples" type="number" min="1000" step="1000" value="50000" />
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="exportCsv" class="btn">Exporter CSV</button>
+          </div>
+        </div>
+        <div class="resgrid" id="resgrid" style="margin-top:12px;display:none">
+          <div class="stat"><div class="label">Moyenne</div><div class="value" id="mMean">—</div></div>
+          <div class="stat"><div class="label">p10</div><div class="value" id="mP10">—</div></div>
+          <div class="stat"><div class="label">p50 (médiane)</div><div class="value" id="mP50">—</div></div>
+          <div class="stat"><div class="label">p90</div><div class="value" id="mP90">—</div></div>
+        </div>
+        <p id="err" class="danger" style="display:none"></p>
+        <canvas id="hist" width="800" height="220" style="margin-top:12px"></canvas>
+      </div>
+    </section>
+
+    <section class="card small">
+      <strong>Règles d'interprétation</strong>
+      <ul>
+        <li>Si <em>min</em> et <em>max</em> sont renseignés ⇒ <strong>Uniforme[min, max]</strong>.</li>
+        <li>Si <em>p10</em> et <em>p90</em> sont renseignés ⇒ <strong>Normale</strong> avec μ=(p10+p90)/2 et σ=(p90−p10)/(2×1.28155).</li>
+        <li>Le percentile 50 (médiane) est ignoré pour la construction de la loi (affiché seulement en sortie).</li>
+      </ul>
+    </section>
+  </main>
+
+  <template id="var-template">
+    <div class="var">
+      <div class="varhead">
+        <div class="flex" style="gap:10px">
+          <div>
+            <label>Nom</label>
+            <input class="v-name" type="text" value="X" />
+          </div>
+          <div style="align-self:flex-end"><span class="badge v-badge">Incomplète</span></div>
+        </div>
+        <div class="toolbar">
+          <button class="btn ghost v-del">Supprimer</button>
+        </div>
+      </div>
+      <div class="row grid-2" style="margin-top:10px">
+        <div>
+          <label>min</label>
+          <input class="v-min" type="text" placeholder="min" />
+        </div>
+        <div>
+          <label>max</label>
+          <input class="v-max" type="text" placeholder="max" />
+        </div>
+      </div>
+      <div class="row grid-3" style="margin-top:10px">
+        <div>
+          <label>p10</label>
+          <input class="v-p10" type="text" placeholder="p10" />
+        </div>
+        <div>
+          <label>p50 (ignoré)</label>
+          <input class="v-p50" type="text" placeholder="p50" />
+        </div>
+        <div>
+          <label>p90</label>
+          <input class="v-p90" type="text" placeholder="p90" />
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // ---------- utils ----------
+    const z90 = 1.2815515655446004; // z-score for 90th percentile
+    function toNum(s){ if(s===undefined||s===null||s==='') return undefined; const n=Number(s); return Number.isFinite(n)?n:undefined }
+    function percentile(sorted, p){ const pos=(sorted.length-1)*p; const base=Math.floor(pos); const rest=pos-base; return sorted[base+1]!==undefined? sorted[base]+rest*(sorted[base+1]-sorted[base]) : sorted[base]; }
+    function mean(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length }
+
+    function boxMuller(){ let u=0,v=0; while(u===0) u=Math.random(); while(v===0) v=Math.random(); const mag=Math.sqrt(-2*Math.log(u)); return [mag*Math.cos(2*Math.PI*v), mag*Math.sin(2*Math.PI*v)]; }
+    function sampleNormal(mu,sd){ const [z]=boxMuller(); return mu+sd*z }
+
+    // ---------- state ----------
+    const state={
+      vars: [],
+      samples: 50000,
+      expr: 'A + B * C',
+      results: null,
+      draws: []
+    };
+
+    // ---------- DOM refs ----------
+    const $vars = document.getElementById('vars');
+    const $tpl = document.getElementById('var-template');
+    const $expr = document.getElementById('expr');
+    const $samples = document.getElementById('samples');
+    const $run = document.getElementById('runBtn');
+    const $reset = document.getElementById('resetBtn');
+    const $err = document.getElementById('err');
+    const $resgrid = document.getElementById('resgrid');
+    const $mMean = document.getElementById('mMean');
+    const $mP10 = document.getElementById('mP10');
+    const $mP50 = document.getElementById('mP50');
+    const $mP90 = document.getElementById('mP90');
+    const $hist = document.getElementById('hist');
+    const $export = document.getElementById('exportCsv');
+
+    // ---------- variable view ----------
+    function addVar(def={name:'X',min:'',max:'',p10:'',p50:'',p90:''}){
+      const node = $tpl.content.firstElementChild.cloneNode(true);
+      const name = node.querySelector('.v-name');
+      const min = node.querySelector('.v-min');
+      const max = node.querySelector('.v-max');
+      const p10 = node.querySelector('.v-p10');
+      const p50 = node.querySelector('.v-p50');
+      const p90 = node.querySelector('.v-p90');
+      const del = node.querySelector('.v-del');
+      const badge = node.querySelector('.v-badge');
+
+      name.value = def.name || 'X';
+      min.value = def.min ?? '';
+      max.value = def.max ?? '';
+      p10.value = def.p10 ?? '';
+      p50.value = def.p50 ?? '';
+      p90.value = def.p90 ?? '';
+
+      function detect(){
+        const hasMinMax = min.value!=='' && max.value!=='';
+        const hasP10P90 = p10.value!=='' && p90.value!=='';
+        if(hasP10P90){ badge.textContent='Normale (p10/p90)'; badge.className='badge ok'; }
+        else if(hasMinMax){ badge.textContent='Uniforme (min/max)'; badge.className='badge ok'; }
+        else { badge.textContent='Incomplète'; badge.className='badge warn'; }
+      }
+      [name,min,max,p10,p50,p90].forEach(inp=> inp.addEventListener('input', detect));
+      detect();
+
+      del.addEventListener('click',()=>{ node.remove(); saveStateFromDOM(); });
+
+      $vars.appendChild(node);
+    }
+
+    function saveStateFromDOM(){
+      const rows = $vars.querySelectorAll('.var');
+      state.vars = Array.from(rows).map(r=>({
+        name: r.querySelector('.v-name').value.trim() || 'X',
+        min: r.querySelector('.v-min').value,
+        max: r.querySelector('.v-max').value,
+        p10: r.querySelector('.v-p10').value,
+        p50: r.querySelector('.v-p50').value,
+        p90: r.querySelector('.v-p90').value,
+      }));
+      state.expr = $expr.value;
+      state.samples = Math.max(1000, Number($samples.value)||50000);
+      localStorage.setItem('mc_state_v1', JSON.stringify(state));
+    }
+
+    function loadState(){
+      const saved = localStorage.getItem('mc_state_v1');
+      if(saved){
+        try{ const s=JSON.parse(saved); if(Array.isArray(s.vars)){
+          $vars.innerHTML='';
+          s.vars.forEach(addVar);
+          $expr.value = s.expr || state.expr;
+          $samples.value = s.samples || state.samples;
+          return;
+        } }catch(e){}
+      }
+      // default
+      addVar({name:'A', min:'0', max:'10'});
+      addVar({name:'B', p10:'8', p90:'12'});
+      addVar({name:'C', min:'1', max:'5'});
+      $expr.value = 'A + B * C';
+      $samples.value = 50000;
+    }
+
+    // ---------- samplers ----------
+    function makeSampler(v){
+      const hasMinMax = v.min!=='' && v.max!=='';
+      const hasP10P90 = v.p10!=='' && v.p90!=='';
+      if(hasMinMax){
+        const a = toNum(v.min); const b = toNum(v.max);
+        if(a===undefined||b===undefined||b<a) return null;
+        return ()=> a + Math.random()*(b-a);
+      }
+      if(hasP10P90){
+        const p10 = toNum(v.p10); const p90 = toNum(v.p90);
+        if(p10===undefined||p90===undefined||p90<p10) return null;
+        const mu = (p10 + p90)/2; const sd = (p90 - p10)/(2*z90);
+        return ()=> sampleNormal(mu, sd);
+      }
+      return null;
+    }
+
+    // ---------- simulation ----------
+    function run(){
+      saveStateFromDOM();
+      $err.style.display='none';
+      $resgrid.style.display='none';
+      state.draws = [];
+
+      // Build samplers map
+      const samplers = {};
+      for(const v of state.vars){
+        const s = makeSampler(v);
+        if(s) samplers[v.name] = s;
+      }
+
+      // Validate variables used in expression
+      const tokens = (state.expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) || []);
+      const used = new Set(tokens);
+      for(const name of used){
+        if(!(name in samplers) && isNaN(Number(name)) && (math[name]===undefined)){
+          showError(`La variable « ${name} » n'est pas définie ou est incomplète.`);
+          return;
+        }
+      }
+
+      // compile expression
+      let compiled;
+      try{ compiled = math.compile(state.expr); }
+      catch(e){ showError('Expression invalide.'); return; }
+
+      const N = state.samples|0;
+      const out = new Float64Array(N);
+      for(let i=0;i<N;i++){
+        const scope={};
+        for(const [n,s] of Object.entries(samplers)) scope[n]=s();
+        const val = compiled.evaluate(scope);
+        if(!Number.isFinite(val)){ showError("L'expression a produit une valeur non finie."); return; }
+        out[i]=val;
+      }
+
+      // sort for percentiles
+      const arr = Array.from(out).sort((a,b)=>a-b);
+      const m = mean(arr);
+      const q10 = percentile(arr,0.10);
+      const q50 = percentile(arr,0.50);
+      const q90 = percentile(arr,0.90);
+      state.results = {mean:m,p10:q10,p50:q50,p90:q90};
+      renderResults();
+      state.draws = arr; drawHist(arr);
+    }
+
+    function showError(msg){ $err.textContent=msg; $err.style.display='block'; }
+
+    function renderResults(){
+      if(!state.results) return;
+      const fmt = x=> new Intl.NumberFormat('fr-FR', {maximumFractionDigits:4}).format(x);
+      $mMean.textContent = fmt(state.results.mean);
+      $mP10.textContent = fmt(state.results.p10);
+      $mP50.textContent = fmt(state.results.p50);
+      $mP90.textContent = fmt(state.results.p90);
+      $resgrid.style.display='grid';
+    }
+
+    // ---------- histogram ----------
+    function drawHist(arr){
+      const ctx=$hist.getContext('2d');
+      ctx.clearRect(0,0,$hist.width,$hist.height);
+      if(!arr.length) return;
+      const w=$hist.width, h=$hist.height, pad=28;
+      const nBins = 50;
+      const min=arr[0], max=arr[arr.length-1];
+      const binW=(max-min)/nBins || 1;
+      const bins=new Array(nBins).fill(0);
+      for(const x of arr){
+        let k=Math.floor((x-min)/binW); if(k>=nBins) k=nBins-1; if(k<0) k=0; bins[k]++;
+      }
+      const maxCount = Math.max(...bins);
+      // axes
+      ctx.strokeStyle = '#2a2f3a'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.moveTo(pad, pad); ctx.lineTo(pad, h-pad); ctx.stroke();
+      // bars
+      const innerW = w-2*pad, innerH = h-2*pad; const barW = innerW/nBins;
+      ctx.fillStyle = '#4f8cff';
+      for(let i=0;i<nBins;i++){
+        const x = pad + i*barW;
+        const y = h-pad - (bins[i]/maxCount)*innerH;
+        ctx.fillRect(x, y, Math.max(1, barW-1), h-pad - y);
+      }
+      // ticks (min, median, max)
+      const q50 = percentile(arr,0.5);
+      const ticks=[{v:min,l:'min'},{v:q50,l:'p50'},{v:max,l:'max'}];
+      ctx.fillStyle = '#cdd9e5'; ctx.textAlign='center'; ctx.font='12px system-ui';
+      for(const t of ticks){
+        const x = pad + (t.v-min)/(max-min)*innerW;
+        ctx.fillRect(x, h-pad, 1, 6);
+        ctx.fillText(new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(t.v)+' '+t.l, x, h-6);
+      }
+    }
+
+    // ---------- export ----------
+    function exportCSV(){
+      if(!state.draws.length){ alert('Pas de résultats à exporter.'); return; }
+      const header='valeur\n';
+      const body=state.draws.join('\n');
+      const blob=new Blob([header+body],{type:'text/csv;charset=utf-8;'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='simulation.csv'; a.click(); URL.revokeObjectURL(url);
+    }
+
+    // ---------- init ----------
+    document.getElementById('addVar').addEventListener('click',()=>{ addVar({name:'X'}); saveStateFromDOM(); });
+    $expr.addEventListener('input', saveStateFromDOM);
+    $samples.addEventListener('input', saveStateFromDOM);
+    $run.addEventListener('click', run);
+    $reset.addEventListener('click', ()=>{ localStorage.removeItem('mc_state_v1'); $vars.innerHTML=''; loadState(); $err.style.display='none'; document.getElementById('hist').getContext('2d').clearRect(0,0,800,220); document.getElementById('resgrid').style.display='none'; });
+    $export.addEventListener('click', exportCSV);
+
+    loadState();
+  </script>
+</body>
+</html>
