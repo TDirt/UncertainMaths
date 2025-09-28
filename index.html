@@ -92,7 +92,8 @@
       <ul>
         <li>Si <em>min</em> et <em>max</em> sont renseignés ⇒ <strong>Uniforme[min, max]</strong>.</li>
         <li>Si <em>p10</em> et <em>p90</em> sont renseignés ⇒ <strong>Normale</strong> avec μ=(p10+p90)/2 et σ=(p90−p10)/(2×1.28155).</li>
-        <li>Le percentile 50 (médiane) est ignoré pour la construction de la loi (affiché seulement en sortie).</li>
+        <li>Si <em>p10</em>, <em>p50</em>, <em>p90</em> sont fournis (et optionnellement <em>min</em>/<em>max</em>) ⇒ <strong>SPT Metalog</strong> (<em>u</em>/<em>sl</em>/<em>su</em>/<em>b</em>) avec un paramètre <code>lowProb</code> (par défaut 0,1) correspondant au quantile « Low ».</li>
+        <li>Le percentile 50 (médiane) est ignoré pour la construction de la loi <em>sauf</em> pour Metalog où il est requis.</li>
       </ul>
     </section>
   </main>
@@ -121,18 +122,22 @@
           <input class="v-max" type="text" placeholder="max" />
         </div>
       </div>
-      <div class="row grid-3" style="margin-top:10px">
+      <div class="row grid-4" style="margin-top:10px">
         <div>
           <label>p10</label>
           <input class="v-p10" type="text" placeholder="p10" />
         </div>
         <div>
-          <label>p50 (ignoré)</label>
+          <label>p50 (médiane)</label>
           <input class="v-p50" type="text" placeholder="p50" />
         </div>
         <div>
           <label>p90</label>
           <input class="v-p90" type="text" placeholder="p90" />
+        </div>
+        <div>
+          <label>lowProb (pour Metalog)</label>
+          <input class="v-lowprob" type="text" placeholder="0.1" />
         </div>
       </div>
     </div>
@@ -182,6 +187,7 @@
       const p10 = node.querySelector('.v-p10');
       const p50 = node.querySelector('.v-p50');
       const p90 = node.querySelector('.v-p90');
+      const lowprob = node.querySelector('.v-lowprob');
       const del = node.querySelector('.v-del');
       const badge = node.querySelector('.v-badge');
 
@@ -191,15 +197,23 @@
       p10.value = def.p10 ?? '';
       p50.value = def.p50 ?? '';
       p90.value = def.p90 ?? '';
+      lowprob.value = def.lowprob ?? '0.1';
 
       function detect(){
         const hasMinMax = min.value!=='' && max.value!=='';
+        const hasP10P50P90 = p10.value!=='' && p50.value!=='' && p90.value!=='';
         const hasP10P90 = p10.value!=='' && p90.value!=='';
-        if(hasP10P90){ badge.textContent='Normale (p10/p90)'; badge.className='badge ok'; }
-        else if(hasMinMax){ badge.textContent='Uniforme (min/max)'; badge.className='badge ok'; }
-        else { badge.textContent='Incomplète'; badge.className='badge warn'; }
+        if(hasP10P50P90){
+          const kind = hasMinMax ? 'b' : (min.value!=='' ? 'sl' : (max.value!=='' ? 'su' : 'u'));
+          badge.textContent = `Metalog SPT (${kind})`;
+          badge.className='badge ok';
+        } else if(hasP10P90){
+          badge.textContent='Normale (p10/p90)'; badge.className='badge ok';
+        } else if(hasMinMax){
+          badge.textContent='Uniforme (min/max)'; badge.className='badge ok';
+        } else { badge.textContent='Incomplète'; badge.className='badge warn'; }
       }
-      [name,min,max,p10,p50,p90].forEach(inp=> inp.addEventListener('input', detect));
+      [name,min,max,p10,p50,p90,lowprob].forEach(inp=> inp.addEventListener('input', detect));
       detect();
 
       del.addEventListener('click',()=>{ node.remove(); saveStateFromDOM(); });
@@ -209,13 +223,15 @@
 
     function saveStateFromDOM(){
       const rows = $vars.querySelectorAll('.var');
-      state.vars = Array.from(rows).map(r=>({
+      state.vars = Array.from(rows).map((r, idx)=>({
         name: r.querySelector('.v-name').value.trim() || 'X',
         min: r.querySelector('.v-min').value,
         max: r.querySelector('.v-max').value,
         p10: r.querySelector('.v-p10').value,
         p50: r.querySelector('.v-p50').value,
         p90: r.querySelector('.v-p90').value,
+        lowprob: r.querySelector('.v-lowprob')?.value,
+        _index: idx
       }));
       state.expr = $expr.value;
       state.samples = Math.max(1000, Number($samples.value)||50000);
@@ -242,20 +258,70 @@
     }
 
     // ---------- samplers ----------
+    function metalogSPTSample(lowProb, Min, Low, Median, High, Max, u){
+      const ln = Math.log;
+      const L = lowProb;
+      const lnterm = ln((1-L)/L);
+      const logitU = ln(u/(1-u));
+      const denom1 = lnterm;
+      const denom2 = (1-2*L)*lnterm;
+      const hasMin = Min!==undefined && Min!=='' && !Number.isNaN(Number(Min));
+      const hasMax = Max!==undefined && Max!=='' && !Number.isNaN(Number(Max));
+      const bounds = hasMin && hasMax ? 'b' : (hasMin ? 'sl' : (hasMax ? 'su' : 'u'));
+      const aMin = hasMin ? Number(Min) : undefined;
+      const aMax = hasMax ? Number(Max) : undefined;
+      if(bounds==='u'){
+        return Median + 0.5*(High-Low)/denom1*logitU + ( (1 - 2*((Median-Low)/(High-Low)) )*(High-Low)/denom2 )*(u-0.5)*logitU;
+      }
+      if(bounds==='sl'){
+        return aMin + Math.exp( Math.log(Median-aMin) + 0.5*( Math.log((High-aMin)/(Low-aMin))/denom1 )*logitU + ( Math.log( ((High-aMin)*(Low-aMin))/((Median-aMin)*(Median-aMin)) )/denom2 )*(u-0.5)*logitU );
+      }
+      if(bounds==='su'){
+        const expo = Math.log(aMax-Median) + 0.5*( Math.log( (aMax-High)/(aMax-Low) )/denom1 )*logitU + ( Math.log( ((aMax-High)*(aMax-Low))/((aMax-Median)*(aMax-Median)) )/denom2 )*(u-0.5)*logitU;
+        return aMax - Math.exp(expo);
+      }
+      if(bounds==='b'){
+        const A = Math.log( (Median-aMin)/(aMax-Median) );
+        const B = 0.5*( Math.log( ((High-aMin)/(aMax-High))/((Low-aMin)/(aMax-Low)) )/denom1 )*logitU;
+        const C = ( Math.log( ( ((High-aMin)/(aMax-High))*((Low-aMin)/(aMax-Low)) )/(((Median-aMin)/(aMax-Median))*((Median-aMin)/(aMax-Median))) )/denom2 )*(u-0.5)*logitU;
+        const E = Math.exp(A + B + C);
+        return (aMin + aMax*E) / (1 + E);
+      }
+      return NaN;
+    }
+
     function makeSampler(v){
       const hasMinMax = v.min!=='' && v.max!=='';
       const hasP10P90 = v.p10!=='' && v.p90!=='';
+      const hasP10P50P90 = v.p10!=='' && v.p50!=='' && v.p90!=='';
+
+      // Metalog SPT si p10, p50, p90 (min/max optionnels)
+      if(hasP10P50P90){
+        const Low = toNum(v.p10); const Median = toNum(v.p50); const High = toNum(v.p90);
+        if([Low,Median,High].some(x=>x===undefined) || !(Low<=Median && Median<=High)) return null;
+        const Min = toNum(v.min); const Max = toNum(v.max);
+        const lowProb = toNum(v.lowprob); const L = (lowProb && lowProb>0 && lowProb<0.5)? lowProb : 0.1;
+        return ()=> {
+          let u = Math.random(); if(u<=0) u = Number.MIN_VALUE; if(u>=1) u = 1-Number.EPSILON;
+          return metalogSPTSample(L, Min, Low, Median, High, Max, u);
+        };
+      }
+
+      // Normale si p10 & p90
+      if(hasP10P90){
+        const p10 = toNum(v.p10); const p90 = toNum(v.p90);
+        if(p10===undefined || p90===undefined || p90<p10) return null;
+        const mu = (p10 + p90)/2; const sd = (p90 - p10)/(2*z90);
+        return ()=> sampleNormal(mu, sd);
+      }
+
+      // Uniforme si min & max
       if(hasMinMax){
         const a = toNum(v.min); const b = toNum(v.max);
         if(a===undefined||b===undefined||b<a) return null;
         return ()=> a + Math.random()*(b-a);
       }
-      if(hasP10P90){
-        const p10 = toNum(v.p10); const p90 = toNum(v.p90);
-        if(p10===undefined||p90===undefined||p90<p10) return null;
-        const mu = (p10 + p90)/2; const sd = (p90 - p10)/(2*z90);
-        return ()=> sampleNormal(mu, sd);
-      }
+
       return null;
     }
 
