@@ -9,7 +9,7 @@
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px;background:#0e1116;position:sticky;top:0;z-index:1;border-bottom:1px solid #1f232b}
     h1{font-size:18px;margin:0}
-    main{max-width:1100px;margin:20px auto;padding:0 16px;display:grid;gap:16px}
+    main{max-width:min(2400px, 96vw);margin:20px auto;padding:0 16px;display:grid;gap:16px}
     .card{background:var(--panel);border:1px solid #1f232b;border-radius:14px;padding:14px}
     label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
     input[type=text], input[type=number]{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2f3a;background:#0e1116;color:var(--text)}
@@ -36,7 +36,7 @@
     .right{margin-left:auto}
     canvas{width:100%;height:220px;background:#0d1016;border:1px solid #1f232b;border-radius:12px}
     .small{font-size:12px}
-    .split{display:grid;grid-template-columns:2.2fr 1fr;gap:16px}
+    .split{display:grid;grid-template-columns:1.2fr 1.8fr;gap:16px}
     @media (max-width:900px){.split{grid-template-columns:1fr}}
   </style>
   <script src="https://unpkg.com/mathjs@11.11.0/lib/browser/math.js"></script>
@@ -71,6 +71,10 @@
             <label>Nombre d'échantillons</label>
             <input id="samples" type="number" min="1000" step="1000" value="50000" />
           </div>
+		  <div style="margin-top:12px">
+			<label>Décimales</label>
+			<input id="decimals" type="number" min="0" max="6" value="0" style="width:80px">
+		  </div>
           <div>
             <label>&nbsp;</label>
             <button id="exportCsv" class="btn">Exporter CSV</button>
@@ -151,9 +155,10 @@
     const state={
       vars: [],
       samples: 50000,
-      expr: 'A + B * C',
+      expr: 'Surface*PrixVente_m² - CoutAchat',
       results: null,
-      draws: []
+      draws: [],
+	  decimals: 0
     };
 
     // ---------- DOM refs ----------
@@ -170,6 +175,7 @@
     const $mP50 = document.getElementById('mP50');
     const $mP90 = document.getElementById('mP90');
     const $hist = document.getElementById('hist');
+	const $decimals = document.getElementById('decimals');
     const $export = document.getElementById('exportCsv');
 
     // ---------- variable view ----------
@@ -246,10 +252,10 @@
         } }catch(e){}
       }
       // default
-      addVar({name:'A', min:'0', max:'10'});
-      addVar({name:'B', p10:'8', p90:'12'});
-      addVar({name:'C', min:'1', max:'5'});
-      $expr.value = 'A + B * C';
+      addVar({name:'Surface', min:'110', max:'120'});
+      addVar({name:'PrixVente_m²', p10:'3300', p50:'4500', p90:'6500'});
+      addVar({name:'CoutAchat', min:'300000', max:'350000'});
+      $expr.value = 'Surface*PrixVente_m² - CoutAchat';
       $samples.value = 50000;
     }
 
@@ -375,7 +381,10 @@
 
     function renderResults(){
       if(!state.results) return;
-      const fmt = x=> new Intl.NumberFormat('fr-FR', {maximumFractionDigits:4}).format(x);
+	  const fmt = x => new Intl.NumberFormat('fr-FR', {
+		minimumFractionDigits: state.decimals,
+		maximumFractionDigits: state.decimals
+	  }).format(x);
       $mMean.textContent = fmt(state.results.mean);
       $mP10.textContent = fmt(state.results.p10);
       $mP50.textContent = fmt(state.results.p50);
@@ -407,14 +416,16 @@
         const y = h-pad - (bins[i]/maxCount)*innerH;
         ctx.fillRect(x, y, Math.max(1, barW-1), h-pad - y);
       }
-      // ticks (min, median, max)
-      const q50 = percentile(arr,0.5);
-      const ticks=[{v:min,l:'min'},{v:q50,l:'p50'},{v:max,l:'max'}];
+      // ticks (p10, median, p90)
+	  const q10 = percentile(arr,0.1);
+	  const q50 = percentile(arr,0.5);
+	  const q90 = percentile(arr,0.9);
+      const ticks=[{v:q10,l:'p10'},{v:q50,l:'p50'},{v:q90,l:'p90'}];
       ctx.fillStyle = '#cdd9e5'; ctx.textAlign='center'; ctx.font='12px system-ui';
       for(const t of ticks){
         const x = pad + (t.v-min)/(max-min)*innerW;
         ctx.fillRect(x, h-pad, 1, 6);
-        ctx.fillText(new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(t.v)+' '+t.l, x, h-6);
+        ctx.fillText(new Intl.NumberFormat('fr-FR',{minimumFractionDigits: state.decimals, maximumFractionDigits: state.decimals}).format(t.v)+' '+t.l, x, h-6);
       }
     }
 
@@ -435,6 +446,7 @@
     $run.addEventListener('click', run);
     $reset.addEventListener('click', ()=>{ localStorage.removeItem('mc_state_v1'); $vars.innerHTML=''; loadState(); $err.style.display='none'; document.getElementById('hist').getContext('2d').clearRect(0,0,800,220); document.getElementById('resgrid').style.display='none'; });
     $export.addEventListener('click', exportCSV);
+	$decimals.addEventListener('input', ()=>{state.decimals = Math.max(0, Number($decimals.value)||0); renderResults();});
 
     loadState();
   </script>
