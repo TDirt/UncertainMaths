@@ -112,17 +112,11 @@
           <button class="btn ghost v-del">X</button>
         </div>
       </div>
-      <div class="row grid-2" style="margin-top:10px">
+      <div class="row" style="margin-top:10px; display:grid; grid-template-columns: repeat(5, 1fr); gap:10px">
         <div>
           <label>min</label>
           <input class="v-min" type="text" placeholder="min" />
         </div>
-        <div>
-          <label>max</label>
-          <input class="v-max" type="text" placeholder="max" />
-        </div>
-      </div>
-      <div class="row grid-4" style="margin-top:10px">
         <div>
           <label>p10</label>
           <input class="v-p10" type="text" placeholder="p10" />
@@ -134,6 +128,10 @@
         <div>
           <label>p90</label>
           <input class="v-p90" type="text" placeholder="p90" />
+        </div>
+		<div>
+          <label>max</label>
+          <input class="v-max" type="text" placeholder="max" />
         </div>
       </div>
     </div>
