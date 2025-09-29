@@ -43,7 +43,7 @@
 </head>
 <body>
   <header>
-    <h1>Calculateur Monte Carlo — Combinaison de distributions</h1>
+    <h1>Uncertain maths - A calculator for when variable can take a wide range of values. </h1>
     <div class="toolbar">
       <button class="btn" id="resetBtn">Réinitialiser</button>
       <button class="btn primary" id="runBtn">Calculer</button>
@@ -53,7 +53,7 @@
     <section class="card">
       <label>Expression</label>
       <input id="expr" type="text" placeholder="Ex: (prix_unitaire - coût_unitaire) * volume_vente" />
-      <p class="small muted">Utilisez les noms exacts des variables ci-dessous. Les fonctions/math constants de <code>math.js</code> sont disponibles.</p>
+      <p class="small muted">Utilisez les noms exacts des variables ci-dessous.</p>
     </section>
 
     <section class="split">
@@ -77,9 +77,9 @@
           </div>
         </div>
         <div class="resgrid" id="resgrid" style="margin-top:12px;display:none">
-          <div class="stat"><div class="label">Moyenne</div><div class="value" id="mMean">—</div></div>
+          <div class="stat"><div class="label">Moy</div><div class="value" id="mMean">—</div></div>
           <div class="stat"><div class="label">p10</div><div class="value" id="mP10">—</div></div>
-          <div class="stat"><div class="label">p50 (médiane)</div><div class="value" id="mP50">—</div></div>
+          <div class="stat"><div class="label">p50</div><div class="value" id="mP50">—</div></div>
           <div class="stat"><div class="label">p90</div><div class="value" id="mP90">—</div></div>
         </div>
         <p id="err" class="danger" style="display:none"></p>
@@ -128,7 +128,7 @@
           <input class="v-p10" type="text" placeholder="p10" />
         </div>
         <div>
-          <label>p50 (médiane)</label>
+          <label>p50</label>
           <input class="v-p50" type="text" placeholder="p50" />
         </div>
         <div>
@@ -136,7 +136,7 @@
           <input class="v-p90" type="text" placeholder="p90" />
         </div>
         <div>
-          <label>lowProb (pour Metalog)</label>
+          <label>lowProb</label>
           <input class="v-lowprob" type="text" placeholder="0.1" />
         </div>
       </div>
