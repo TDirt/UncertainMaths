@@ -109,7 +109,7 @@
           <div style="align-self:flex-end"><span class="badge v-badge">Incomplète</span></div>
         </div>
         <div class="toolbar">
-          <button class="btn ghost v-del">Supprimer</button>
+          <button class="btn ghost v-del">X</button>
         </div>
       </div>
       <div class="row grid-2" style="margin-top:10px">
@@ -134,10 +134,6 @@
         <div>
           <label>p90</label>
           <input class="v-p90" type="text" placeholder="p90" />
-        </div>
-        <div>
-          <label>lowProb</label>
-          <input class="v-lowprob" type="text" placeholder="0.1" />
         </div>
       </div>
     </div>
@@ -187,7 +183,8 @@
       const p10 = node.querySelector('.v-p10');
       const p50 = node.querySelector('.v-p50');
       const p90 = node.querySelector('.v-p90');
-      const lowprob = node.querySelector('.v-lowprob');
+      //const lowprob = node.querySelector('.v-lowprob');
+	  const lowprob = '0.1';
       const del = node.querySelector('.v-del');
       const badge = node.querySelector('.v-badge');
 
@@ -197,7 +194,7 @@
       p10.value = def.p10 ?? '';
       p50.value = def.p50 ?? '';
       p90.value = def.p90 ?? '';
-      lowprob.value = def.lowprob ?? '0.1';
+      //lowprob.value = def.lowprob ?? '0.1';
 
       function detect(){
         const hasMinMax = min.value!=='' && max.value!=='';
@@ -213,7 +210,8 @@
           badge.textContent='Uniforme (min/max)'; badge.className='badge ok';
         } else { badge.textContent='Incomplète'; badge.className='badge warn'; }
       }
-      [name,min,max,p10,p50,p90,lowprob].forEach(inp=> inp.addEventListener('input', detect));
+      //[name,min,max,p10,p50,p90,lowprob].forEach(inp=> inp.addEventListener('input', detect));
+	  [name,min,max,p10,p50,p90].forEach(inp=> inp.addEventListener('input', detect));
       detect();
 
       del.addEventListener('click',()=>{ node.remove(); saveStateFromDOM(); });
@@ -230,7 +228,7 @@
         p10: r.querySelector('.v-p10').value,
         p50: r.querySelector('.v-p50').value,
         p90: r.querySelector('.v-p90').value,
-        lowprob: r.querySelector('.v-lowprob')?.value,
+        //lowprob: r.querySelector('.v-lowprob')?.value,
         _index: idx
       }));
       state.expr = $expr.value;
