@@ -52,7 +52,7 @@
   <main>
     <section class="card">
       <label>Expression</label>
-      <input id="expr" type="text" placeholder="Ex: (prix_unitaire - coût_unitaire) * volume_vente" />
+      <input id="expr" type="text" placeholder="Ex: Surface*PrixVente_m2 - CoutAchat" />
       <p class="small muted">Utilisez les noms exacts des variables ci-dessous.</p>
     </section>
 
@@ -155,7 +155,7 @@
     const state={
       vars: [],
       samples: 50000,
-      expr: 'Surface*PrixVente_m² - CoutAchat',
+      expr: 'Surface*PrixVente_m2 - CoutAchat',
       results: null,
       draws: [],
 	  decimals: 0
@@ -253,9 +253,9 @@
       }
       // default
       addVar({name:'Surface', min:'110', max:'120'});
-      addVar({name:'PrixVente_m²', p10:'3300', p50:'4500', p90:'6500'});
+      addVar({name:'PrixVente_m2', p10:'3300', p50:'4500', p90:'6500'});
       addVar({name:'CoutAchat', min:'300000', max:'350000'});
-      $expr.value = 'Surface*PrixVente_m² - CoutAchat';
+      $expr.value = 'Surface*PrixVente_m2 - CoutAchat';
       $samples.value = 50000;
     }
 
